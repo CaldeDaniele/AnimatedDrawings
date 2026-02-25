@@ -18,11 +18,13 @@ RUN apt-get update && \
 
 RUN conda install python=3.8.13 -y
 
+# Evita timeout durante il download di torch: 20 min
+ENV PIP_DEFAULT_TIMEOUT=1200
 
 # install python dependencies
-RUN pip install openmim
-RUN pip install torch==2.0.0
-RUN mim install mmcv-full==1.7.0
+# torch 1.13 + cu117: permette di usare il wheel precompilato mmcv-full 1.7.0 (evita build da sorgente, v. https://github.com/open-mmlab/mmcv/issues/2637)
+RUN pip install --default-timeout=1200 torch==1.13.0 torchvision==0.14.0 --extra-index-url https://download.pytorch.org/whl/cu117
+RUN pip install mmcv-full==1.7.0 -f https://download.openmmlab.com/mmcv/dist/cu117/torch1.13.0/index.html
 RUN pip install mmdet==2.27.0
 RUN pip install torchserve
 
@@ -33,8 +35,7 @@ RUN pip install -r requirements.txt
 RUN python setup.py install
 WORKDIR /
 RUN pip install mmpose==0.29.0
-RUN pip install torchvision==0.15.1  # solve torch version problem
-RUN pip install numpy==1.24.4  #solve numpy version problem
+RUN pip install numpy==1.24.4  # solve numpy version compatibility
 
 # prep torchserve
 RUN mkdir -p /home/torchserve/model-store
