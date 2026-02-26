@@ -13,6 +13,9 @@ WORKDIR /app/AnimatedDrawings
 
 COPY . /app/AnimatedDrawings
 
+# Fix CRLF line endings on Windows so entrypoint runs on Linux (avoid: /usr/bin/env: 'bash\r': No such file or directory)
+RUN sed -i 's/\r$//' /app/AnimatedDrawings/torchserve/docker-entrypoint-api.sh
+
 RUN pip install -e /app/AnimatedDrawings
 RUN pip install fastapi "uvicorn[standard]" python-multipart
 RUN chmod +x /app/AnimatedDrawings/torchserve/docker-entrypoint-api.sh

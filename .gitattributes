@@ -1,0 +1,2 @@
+# Shell scripts: always LF so Linux/Docker run correctly on Windows
+*.sh text eol=lf

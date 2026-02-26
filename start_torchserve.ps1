@@ -54,16 +54,26 @@ function Wait-Services {
     return $false
 }
 
-$containers = docker ps -a --format "{{.Names}}" 2>$null
-$running = docker ps --format "{{.Names}}" 2>$null
-if ($containers -match "^$containerName$" -or $containers -match $containerName) {
-    if ($running -notmatch "^$containerName$" -and $running -notmatch $containerName) {
+$containers = (docker ps -a --format "{{.Names}}" 2>$null) -split "`n" | ForEach-Object { $_.Trim() }
+$running = (docker ps --format "{{.Names}}" 2>$null) -split "`n" | ForEach-Object { $_.Trim() }
+$containerExists = $containers -contains $containerName
+$containerRunning = $running -contains $containerName
+if ($containerExists) {
+    if (-not $containerRunning) {
         Write-Host "Avvio container $containerName..."
-        docker start $containerName | Out-Null
+        $startResult = docker start $containerName 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Container non avviabile (forse corrotti): $startResult"
+            Write-Host "Rimozione e ricreazione..."
+            docker rm -f $containerName 2>$null
+            $containerExists = $false
+        } else {
+            if (Wait-Services) { exit 0 } else { exit 1 }
+        }
     } else {
         Write-Host "Container già in esecuzione ($containerName)."
+        if (Wait-Services) { exit 0 } else { exit 1 }
     }
-    if (Wait-Services) { exit 0 } else { exit 1 }
 }
 
 $useGpu = $false
