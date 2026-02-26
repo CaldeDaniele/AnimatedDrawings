@@ -30,6 +30,8 @@ Mac M1/M2 users: if you get architecture errors, make sure your `~/.condarc` doe
 
 ## Using Animated Drawings
 
+You can animate drawings in two main ways: **interactively** (Python + config files, see Quick Start below) or via the **HTTP API** (Docker: send an image and motion config, get back a GIF). The API is described in [Animating Your Own Drawing → Option 1: Docker with HTTP API](#option-1-docker-with-http-api-recommended).
+
 ### Quick Start
 Now that everything's set up, let's animate some drawings! To get started, follow these steps:
 1. Open a terminal and activate the animated_drawings conda environment:
@@ -106,50 +108,87 @@ I wouldn't want you to create those annotation files manually. That would be ted
 To make it fast and easy, we've trained a drawn humanoid figure detector and pose estimator and provided scripts to automatically generate annotation files from the model predictions.
 There are currently two options for setting this up.
 
-#### Option 1: Docker
-To get it working, you'll need to set up a Docker container that runs TorchServe.
-This allows us to quickly show your image to our machine learning models and receive their predictions.
+#### Option 1: Docker with HTTP API (recommended)
 
-To set up the container, follow these steps:
+A single Docker image runs **TorchServe** (detection/pose) and a **REST API** that accepts an image and a motion config and returns an animated GIF. You can use it from any client (browser, `curl`, another app) without running Python locally.
 
-1. [Install Docker Desktop](https://docs.docker.com/get-docker/)
-2. Ensure Docker Desktop is running.
-3. Run the following commands, starting from the Animated Drawings root directory:
+**1. Install and start Docker**
+
+- [Install Docker Desktop](https://docs.docker.com/get-docker/) and ensure it is running.
+- From the **AnimatedDrawings root directory**, run:
+
+  **Mac / Linux:**
+
+  ````bash
+  ./start_torchserve.sh
+  ````
+
+  **Windows (PowerShell):**
+
+  ````powershell
+  .\start_torchserve.ps1
+  ````
+
+  The first run builds two images (base TorchServe, then API) and can take several minutes. If you see "cannot allocate memory", give Docker more RAM (e.g. 16GB in Docker Desktop → Settings → Resources).
+
+**2. Use the API**
+
+Once the script reports "API OK", you have:
+
+| What | URL |
+|------|-----|
+| **Swagger UI** (try the API in the browser) | [http://localhost:8000/docs](http://localhost:8000/docs) |
+| **OpenAPI schema** | [http://localhost:8000/openapi.json](http://localhost:8000/openapi.json) |
+| **Health check** | `GET http://localhost:8000/health` |
+| **Generate GIF** | `POST http://localhost:8000/gif` |
+
+**Generate a GIF** — send an image and a motion config (multipart form):
+
+- `image`: PNG or JPG file.
+- `motion_cfg`: motion name (e.g. `dab`, `wave_hello`, `zombie`, `jumping_jacks`) or path like `config/motion/dab.yaml`.
+- `retarget_cfg`: (optional) e.g. `fair1_ppf` (default).
+
+Example with `curl`:
 
 ````bash
-    (animated_drawings) AnimatedDrawings % cd torchserve
-
-    # build the docker image... this takes a while (~5-7 minutes on Macbook Pro 2021)
-    (animated_drawings) torchserve % docker build -t docker_torchserve .
-
-    # start the docker container and expose the necessary ports
-    (animated_drawings) torchserve % docker run -d --name docker_torchserve -p 8080:8080 -p 8081:8081 docker_torchserve
+curl -X POST "http://localhost:8000/gif" \
+  -F "image=@path/to/your/drawing.png" \
+  -F "motion_cfg=dab" \
+  -o animation.gif
 ````
 
-Wait ~10 seconds, then ensure Docker and TorchServe are working by pinging the server:
+The response body is the GIF file. You can also call the API from another project (e.g. a web app or backend) by posting to `http://localhost:8000/gif` (or your server’s host/port).
+
+**Files involved**
+
+- `api_server.py` — FastAPI app (POST /gif, GET /health).
+- `gif_pipeline.py` — pipeline: image → annotations → render → video.gif.
+- `torchserve/Dockerfile.api` — Dockerfile for the all-in-one image.
+- `start_torchserve.sh` / `start_torchserve.ps1` — build and run the container (TorchServe + API on ports 8080/8081 and 8000).
+
+#### Option 1b: Docker (TorchServe only, no API)
+
+If you only need TorchServe and prefer to run the pipeline from the command line (e.g. `image_to_animation.py`), you can build and run the base image by hand:
+
+1. [Install Docker Desktop](https://docs.docker.com/get-docker/) and ensure it is running.
+2. From the Animated Drawings root directory:
 
 ````bash
-    (animated_drawings) torchserve % curl http://localhost:8080/ping
-
-    # should return:
-    # {
-    #   "status": "Healthy"
-    # }
+    cd torchserve
+    docker build -t docker_torchserve .
+    docker run -d --name docker_torchserve -p 8080:8080 -p 8081:8081 docker_torchserve
 ````
 
-If, after waiting, the response is `curl: (52) Empty reply from server`, one of two things is likely happening.
-1. Torchserve hasn't finished initializing yet, so wait another 10 seconds and try again.
-2. Torchserve is failing because it doesn't have enough RAM.  Try [increasing the amount of memory available to your Docker containers](https://docs.docker.com/desktop/settings/mac/#advanced) to 16GB by modifying Docker Desktop's settings.
+Wait ~10 seconds, then check: `curl http://localhost:8080/ping` should return `{"status":"Healthy"}`. If you get an empty reply, wait longer or increase Docker memory to 16GB.
 
-With that set up, you can now go directly from image -> animation with a single command:
+Then, from the repo root (with conda env active), run the pipeline locally:
 
 ````bash
-    (animated_drawings) torchserve % cd ../examples
-    (animated_drawings) examples % python image_to_animation.py drawings/garlic.png garlic_out
+    cd examples
+    python image_to_animation.py drawings/garlic.png garlic_out
 ````
 
-As you waited, the image located at `drawings/garlic.png` was analyzed, the character detected, segmented, and rigged, and it was animated using BVH motion data from a human actor.
-The resulting animation was saved as `./garlic_out/video.gif`.
+The result is saved as `./garlic_out/video.gif`. You can pass a motion config as the third argument, e.g. `python image_to_animation.py drawings/garlic.png garlic_out config/motion/dab.yaml`.
 
 <img src='./examples/drawings/garlic.png' height="256" /><img src='./media/garlic.gif' width="256" height="256" /></br></br></br>
 

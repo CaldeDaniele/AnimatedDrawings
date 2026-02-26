@@ -1,0 +1,26 @@
+# syntax = docker/dockerfile:1.2
+
+FROM docker_torchserve
+
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y \
+    libgl1-mesa-glx \
+    libglu1-mesa \
+    libosmesa6 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app/AnimatedDrawings
+
+COPY . /app/AnimatedDrawings
+
+RUN pip install -e /app/AnimatedDrawings
+RUN pip install fastapi "uvicorn[standard]" python-multipart
+RUN chmod +x /app/AnimatedDrawings/torchserve/docker-entrypoint-api.sh
+
+ENV ANIMATED_DRAWINGS_ROOT=/app/AnimatedDrawings
+ENV AD_USE_MESA=1
+ENV PYTHONUNBUFFERED=1
+
+EXPOSE 8000 8080 8081
+
+ENTRYPOINT ["/app/AnimatedDrawings/torchserve/docker-entrypoint-api.sh"]

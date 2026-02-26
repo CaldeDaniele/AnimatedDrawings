@@ -18,8 +18,11 @@ pip install -r requirements.txt
 python setup.py install
 cd ..
 
-pip install -U openmim torch==1.13.0 torchserve mmdet==2.27.0 mmpose==0.29.0 numpy==1.23.3 requests==2.31.0 scipy==1.10.0 tqdm==4.64.1
-mim install mmcv-full==1.7.0
+# Ordine importante (issue open-mmlab/mmcv#2637): installare mmcv-full dal wheel PRIMA di mmdet/mmpose,
+# altrimenti pip tenta di buildare mmcv da sorgente (può richiedere 30+ min o restare appeso).
+pip install -U openmim torch==1.13.0 numpy==1.23.3 requests==2.31.0 scipy==1.10.0 tqdm==4.64.1
+pip install mmcv-full==1.7.0 -f https://download.openmmlab.com/mmcv/dist/cpu/torch1.13.0/index.html
+pip install torchserve mmdet==2.27.0 mmpose==0.29.0
 
 echo "*** Downloading models"
 mkdir -p ./model-store
