@@ -28,6 +28,7 @@ RUN pip install --default-timeout=1200 torch==1.13.0 torchvision==0.14.0 --extra
 RUN pip install --default-timeout=1200 --only-binary mmcv-full mmcv-full==1.7.0 -f https://download.openmmlab.com/mmcv/dist/cu117/torch1.13.0/index.html
 RUN pip install mmdet==2.27.0
 RUN pip install torchserve
+RUN pip install nvgpu
 
 # bugfix for xtcocoapi, an mmpose dependency
 RUN git clone https://github.com/jin-s13/xtcocoapi.git
