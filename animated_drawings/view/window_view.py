@@ -2,6 +2,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import os
 from animated_drawings.view.view import View
 from animated_drawings.view.shaders.shader import Shader
 from animated_drawings.view.utils import get_projection_matrix
@@ -114,6 +115,9 @@ class WindowView(View):
         glfw.window_hint(glfw.OPENGL_FORWARD_COMPAT, GL.GL_TRUE)
         glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
         glfw.window_hint(glfw.RESIZABLE, False)
+        # headless: render offscreen with GPU without showing a window (e.g. video_render)
+        if os.environ.get('AD_HEADLESS', '').strip().lower() in ('1', 'true', 'yes'):
+            glfw.window_hint(glfw.VISIBLE, glfw.FALSE)
 
         self.win = glfw.create_window(width, height, 'Viewer', None, None)
 

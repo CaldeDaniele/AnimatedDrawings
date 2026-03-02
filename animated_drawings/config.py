@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 import logging
+import os
 from collections import defaultdict
 from pathlib import Path
 from typing import Union, List, Tuple, Dict, TypedDict, Optional
@@ -177,6 +178,10 @@ class ViewConfig():
             msg = f'Error in USE_MESA config parameter: {e}'
             logging.critical(msg)
             assert False, msg
+        # override from environment: AD_USE_MESA=0 -> GPU OpenGL, AD_USE_MESA=1 -> Mesa (CPU)
+        if 'AD_USE_MESA' in os.environ:
+            self.use_mesa = os.environ['AD_USE_MESA'].strip().lower() in ('1', 'true', 'yes')
+            logging.info(f'USE_MESA overridden by env: {self.use_mesa}')
 
         # set the position of the view camera
         try:
