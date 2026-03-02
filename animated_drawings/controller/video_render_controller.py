@@ -51,6 +51,10 @@ class VideoRenderController(Controller):
         self.frame_data = np.empty([self.video_height, self.video_width, 4], dtype='uint8')  # 4 for RGBA
 
         self.progress_bar = tqdm(total=self.frames_left_to_render)
+        # Profiling: time per phase (retarget, render, read+queue, gif write)
+        self._time_update = 0.0
+        self._time_render = 0.0
+        self._time_read_process = 0.0
 
     def _set_frames_left_to_render_and_delta_t(self) -> None:
         """
@@ -84,10 +88,14 @@ class VideoRenderController(Controller):
         self.view.clear_window()
 
     def _update(self) -> None:
+        t0 = time.perf_counter()
         self.scene.update_transforms()
+        self._time_update += time.perf_counter() - t0
 
     def _render(self) -> None:
+        t0 = time.perf_counter()
         self.view.render(self.scene)
+        self._time_render += time.perf_counter() - t0
 
     def _tick(self) -> None:
         self.scene.progress_time(self.delta_t)
@@ -96,10 +104,12 @@ class VideoRenderController(Controller):
         """ ignore all user input when rendering video file """
 
     def _finish_run_loop_iteration(self) -> None:
+        t0 = time.perf_counter()
         # get pixel values from the frame buffer, send them to the video writer
         GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, 0)
         GL.glReadPixels(0, 0, self.video_width, self.video_height, GL.GL_BGRA, GL.GL_UNSIGNED_BYTE, self.frame_data)
         self.video_writer.process_frame(self.frame_data[::-1, :, :].copy())
+        self._time_read_process += time.perf_counter() - t0
 
         # update our counts and progress_bar
         self.frames_left_to_render -= 1
@@ -107,12 +117,22 @@ class VideoRenderController(Controller):
         self.progress_bar.update(1)
 
     def _cleanup_after_run_loop(self) -> None:
-        logging.info(f'Rendered {self.frames_rendered} frames in {time.time()-self.run_loop_start_time} seconds.')
+        total_loop = time.time() - self.run_loop_start_time
+        logging.info(f'Rendered {self.frames_rendered} frames in {total_loop} seconds.')
         self.view.cleanup()
 
-        _time = time.time()
+        t_cleanup = time.perf_counter()
         self.video_writer.cleanup()
-        logging.info(f'Wrote video to file in in {time.time()-_time} seconds.')
+        time_gif_or_mp4 = time.perf_counter() - t_cleanup
+        logging.info(f'Wrote video to file in {time_gif_or_mp4:.2f} seconds.')
+        # Breakdown per phase (solo se abbiamo dati)
+        if self._time_update or self._time_render or self._time_read_process:
+            tot = self._time_update + self._time_render + self._time_read_process + time_gif_or_mp4
+            print(
+                '[Animation breakdown] '
+                f'retarget: {self._time_update:.2f}s | render: {self._time_render:.2f}s | '
+                f'read+queue: {self._time_read_process:.2f}s | write_file: {time_gif_or_mp4:.2f}s | total: {tot:.2f}s'
+            )
 
 
 class VideoWriter():
@@ -177,8 +197,17 @@ class GIFWriter(VideoWriter):
         from PIL import Image
         self.output_p.parent.mkdir(exist_ok=True, parents=True)
         logging.info(f'VideoWriter will write to {self.output_p.resolve()}')
+        # fromarray is cheap; save(..., optimize=False) skips LZW optimization for faster write
         ims = [Image.fromarray(a_frame) for a_frame in self.frames]
-        ims[0].save(self.output_p, save_all=True, append_images=ims[1:], duration=self.duration, disposal=2, loop=0)
+        ims[0].save(
+            self.output_p,
+            save_all=True,
+            append_images=ims[1:],
+            duration=self.duration,
+            disposal=2,
+            loop=0,
+            optimize=False,
+        )
 
 
 class MP4Writer(VideoWriter):

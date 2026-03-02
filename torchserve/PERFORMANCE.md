@@ -86,6 +86,10 @@ Oppure avvia l’app desktop, elabora un’immagine e guarda la **console** dove
 - Se **image_to_annotations** è la parte più lunga → il collo di bottiglia è TorchServe (già su GPU; si può provare batch/worker).
 - Se **annotations_to_animation** è la parte più lunga → il collo di bottiglia è retarget/render/GIF su CPU (vedi tabella sopra).
 
+**Dettaglio animazione:** alla fine del rendering viene stampata una riga `[Animation breakdown]` con i secondi per fase: **retarget**, **render**, **read+queue**, **write_file** (GIF/MP4). Serve a capire dove intervenire (es. se write_file domina, il GIF è lento; se retarget domina, si può valutare CuPy/PyTorch).
+
+**Per stare sotto ~10 s:** (1) **Cache BVH**: dalla seconda animazione in poi (stesso processo) il BVH non viene ri-parsato → fase "scene" molto più veloce. (2) **MP4** (opzionale): `AD_OUTPUT_MP4=1` scrive `video.mp4` (encode più veloce, ~1 s in meno); l’MP4 non supporta la trasparenza, quindi il default resta GIF.
+
 ## Applicare le modifiche
 
 - **Docker**: dopo aver cambiato `config.properties` ricostruisci l’immagine e riavvia il container.

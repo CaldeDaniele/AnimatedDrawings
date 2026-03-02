@@ -3,9 +3,10 @@
 # LICENSE file in the root directory of this source tree.
 
 from __future__ import annotations  # so we can refer to class Type inside class
+import copy
 import logging
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -126,14 +127,18 @@ class BVH(Transform, TimeManager):
 
         return Vectors(vectors_cw_perpendicular_to_fwd).average().perpendicular()
 
+    _load_cache: Dict[Tuple[str, int, Optional[int]], "BVH"] = {}
+
     @classmethod
     def from_file(cls, bvh_fn: str, start_frame_idx: int = 0, end_frame_idx: Optional[int] = None) -> BVH:
-        """ Given a path to a .bvh, constructs and returns BVH object"""
+        """ Given a path to a .bvh, constructs and returns BVH object. Uses a cache for the same (path, start, end). """
 
         # search for the BVH file specified
         bvh_p: Path = resolve_ad_filepath(bvh_fn, 'bvh file')
-        logging.info(f'Using BVH file located at {bvh_p.resolve()}')
+        bvh_resolved = str(bvh_p.resolve())
 
+        # Cache key will be (path, start, end); end is set after parsing, so we parse first then check cache
+        # with a key that includes the resolved end_frame_idx
         with open(str(bvh_p), 'r') as f:
             lines = f.read().splitlines()
 
@@ -154,7 +159,15 @@ class BVH(Transform, TimeManager):
         frame_max_num = int(lines.pop(0).split(':')[-1])
         frame_time = float(lines.pop(0).split(':')[-1])
 
-        # Parse motion data
+        # Set end_frame if not passed in (need it for cache key)
+        _end = end_frame_idx if end_frame_idx is not None else frame_max_num
+        if frame_max_num < _end:
+            _end = frame_max_num
+        _cache_key = (bvh_resolved, start_frame_idx, _end)
+        if _cache_key in BVH._load_cache:
+            return copy.deepcopy(BVH._load_cache[_cache_key])
+
+        # Parse motion data (heavy)
         frames = [list(map(float, line.strip().split(' '))) for line in lines]
         if len(frames) != frame_max_num:
             msg = f'framenum specified ({frame_max_num}) and found ({len(frames)}) do not match'
@@ -183,7 +196,9 @@ class BVH(Transform, TimeManager):
         # new frame_max_num based is end_frame_idx minus start_frame_idx
         frame_max_num = end_frame_idx - start_frame_idx
 
-        return BVH(bvh_p.name, root_joint, frame_max_num, frame_time, pos_data, rot_data)
+        bvh = BVH(bvh_p.name, root_joint, frame_max_num, frame_time, pos_data, rot_data)
+        BVH._load_cache[_cache_key] = bvh
+        return bvh
 
     @classmethod
     def _parse_skeleton(cls, lines: List[str]) -> BVH_Joint:
